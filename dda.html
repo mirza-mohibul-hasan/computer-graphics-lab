@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DDA Line Drawing</title>
+    <style>
+      canvas {
+        border: 1px solid black;
+      }
+      table {
+        margin-top: 20px;
+        border-collapse: collapse;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+      th,
+      td {
+        padding: 5px;
+        text-align: center;
+      }
+      .container {
+        display: flex;
+        gap: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>DDA Line Drawing</h2>
+    <label for="x1">X1:</label>
+    <input type="number" id="x1" value="6" />
+    <label for="y1">Y1:</label>
+    <input type="number" id="y1" value="9" />
+    <label for="x2">X2:</label>
+    <input type="number" id="x2" value="11" />
+    <label for="y2">Y2:</label>
+    <input type="number" id="y2" value="12" />
+    <button onclick="drawLine()">Draw Line</button>
+    <br /><br />
+    <div class="container">
+      <canvas id="glcanvas" width="500" height="500"></canvas>
+
+      <div>
+        <h3>Calculated Points</h3>
+        <table id="pointsTable">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>X</th>
+              <th>Y</th>
+              <th>Plot</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      function drawLine() {
+        const canvas = document.getElementById("glcanvas");
+        const gl = canvas.getContext("webgl");
+
+        if (!gl) {
+          alert("WebGL not supported, falling back on experimental-webgl");
+          gl = canvas.getContext("experimental-webgl");
+        }
+
+        if (!gl) {
+          alert("Your browser does not support WebGL");
+          return;
+        }
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        const x1 = parseFloat(document.getElementById("x1").value);
+        const y1 = parseFloat(document.getElementById("y1").value);
+        const x2 = parseFloat(document.getElementById("x2").value);
+        const y2 = parseFloat(document.getElementById("y2").value);
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const steps = Math.abs(dx) > Math.abs(dy) ? Math.abs(dx) : Math.abs(dy);
+        const Xinc = dx / steps;
+        const Yinc = dy / steps;
+
+        let x = x1;
+        let y = y1;
+
+        const vertices = [];
+        const points = [];
+
+        for (let i = 0; i <= steps; i++) {
+          vertices.push(x / (canvas.width / 2) - 1);
+          vertices.push(y / (canvas.height / 2) - 1);
+          points.push({
+            step: i,
+            x: x.toFixed(2),
+            y: y.toFixed(2),
+            plot: `(${Math.round(x)}, ${Math.round(y)})`,
+          });
+          x += Xinc;
+          y += Yinc;
+        }
+
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(vertices),
+          gl.STATIC_DRAW
+        );
+
+        const vertexShaderSource = `
+          attribute vec2 coordinates;
+          void main(void) {
+              gl_Position = vec4(coordinates, 0.0, 1.0);
+              gl_PointSize = 2.0;
+          }`;
+
+        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertexShader, vertexShaderSource);
+        gl.compileShader(vertexShader);
+
+        const fragmentShaderSource = `
+          void main(void) {
+              gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+          }`;
+
+        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragmentShader, fragmentShaderSource);
+        gl.compileShader(fragmentShader);
+
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        const coord = gl.getAttribLocation(shaderProgram, "coordinates");
+        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(coord);
+
+        gl.drawArrays(gl.POINTS, 0, vertices.length / 2);
+
+        const pointsTableBody = document
+          .getElementById("pointsTable")
+          .getElementsByTagName("tbody")[0];
+        pointsTableBody.innerHTML = "";
+        points.forEach((point) => {
+          const row = pointsTableBody.insertRow();
+          const cell1 = row.insertCell(0);
+          const cell2 = row.insertCell(1);
+          const cell3 = row.insertCell(2);
+          const cell4 = row.insertCell(3);
+          cell1.innerHTML = point.step;
+          cell2.innerHTML = point.x;
+          cell3.innerHTML = point.y;
+          cell4.innerHTML = point.plot;
+        });
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bresenham Line Drawing with WebGL</title>
+    <style>
+      canvas {
+        border: 1px solid black;
+      }
+      table {
+        margin-top: 20px;
+        border-collapse: collapse;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+      th,
+      td {
+        padding: 5px;
+        text-align: center;
+      }
+      .container {
+        display: flex;
+        gap: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Bresenham Line Drawing with WebGL</h2>
+    <label for="x1">X1:</label>
+    <input type="number" id="x1" value="20" />
+    <label for="y1">Y1:</label>
+    <input type="number" id="y1" value="10" />
+    <label for="x2">X2:</label>
+    <input type="number" id="x2" value="30" />
+    <label for="y2">Y2:</label>
+    <input type="number" id="y2" value="18" />
+    <button onclick="drawLine()">Draw Line</button>
+    <br /><br />
+    <div class="container">
+      <canvas id="glcanvas" width="500" height="500"></canvas>
+
+      <div>
+        <h3>Calculated Points</h3>
+        <table id="pointsTable">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>X</th>
+              <th>Y</th>
+              <th>Plot</th>
+              <th>Decision Parameter</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- <script type="text/javascript" src="bresenham.js"></script> -->
+    <script>
+      function drawLine() {
+        const canvas = document.getElementById("glcanvas");
+        const gl = canvas.getContext("webgl");
+
+        if (!gl) {
+          alert("WebGL not supported, falling back on experimental-webgl");
+          gl = canvas.getContext("experimental-webgl");
+        }
+
+        if (!gl) {
+          alert("Your browser does not support WebGL");
+          return;
+        }
+
+        // Clear the canvas
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Get user input
+        const x0 = parseFloat(document.getElementById("x1").value);
+        const y0 = parseFloat(document.getElementById("y1").value);
+        const x1 = parseFloat(document.getElementById("x2").value);
+        const y1 = parseFloat(document.getElementById("y2").value);
+
+        // Calculate the differences
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const sx = dx > 0 ? 1 : -1;
+        const sy = dy > 0 ? 1 : -1;
+
+        // Initialize decision parameter and other variables
+        let pk = 2 * absDy - absDx;
+        let x = x0;
+        let y = y0;
+
+        const vertices = [];
+        const points = [];
+        let step = 0;
+
+        // Plot the initial point
+        vertices.push(x / (canvas.width / 2) - 1);
+        vertices.push(y / (canvas.height / 2) - 1);
+        points.push({
+          step: step++,
+          x: x.toFixed(2),
+          y: y.toFixed(2),
+          plot: `(${Math.round(x)}, ${Math.round(y)})`,
+          decisionParameter: pk,
+        });
+
+        for (let i = 0; i < absDx; i++) {
+          if (pk < 0) {
+            pk += 2 * absDy;
+          } else {
+            pk += 2 * absDy - 2 * absDx;
+            y += sy;
+          }
+          x += sx;
+
+          vertices.push(x / (canvas.width / 2) - 1);
+          vertices.push(y / (canvas.height / 2) - 1);
+          points.push({
+            step: step++,
+            x: x.toFixed(2),
+            y: y.toFixed(2),
+            plot: `(${Math.round(x)}, ${Math.round(y)})`,
+            decisionParameter: pk,
+          });
+        }
+
+        // Create a buffer for the vertices
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(vertices),
+          gl.STATIC_DRAW
+        );
+
+        // Vertex shader source code
+        const vertexShaderSource = `
+              attribute vec2 coordinates;
+              void main(void) {
+                  gl_Position = vec4(coordinates, 0.0, 1.0);
+                  gl_PointSize = 2.0;
+              }`;
+
+        // Create and compile the vertex shader
+        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertexShader, vertexShaderSource);
+        gl.compileShader(vertexShader);
+
+        // Fragment shader source code
+        const fragmentShaderSource = `
+              void main(void) {
+                  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+              }`;
+
+        // Create and compile the fragment shader
+        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragmentShader, fragmentShaderSource);
+        gl.compileShader(fragmentShader);
+
+        // Create and link the shader program
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+
+        // Bind vertex buffer and set attributes
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        const coord = gl.getAttribLocation(shaderProgram, "coordinates");
+        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(coord);
+
+        // Draw the points
+        gl.drawArrays(gl.POINTS, 0, vertices.length / 2);
+
+        // Populate the table with points
+        const pointsTableBody = document
+          .getElementById("pointsTable")
+          .getElementsByTagName("tbody")[0];
+        pointsTableBody.innerHTML = "";
+        points.forEach((point) => {
+          const row = pointsTableBody.insertRow();
+          const cell1 = row.insertCell(0);
+          const cell2 = row.insertCell(1);
+          const cell3 = row.insertCell(2);
+          const cell4 = row.insertCell(3);
+          const cell5 = row.insertCell(4);
+          cell1.innerHTML = point.step;
+          cell2.innerHTML = point.x;
+          cell3.innerHTML = point.y;
+          cell4.innerHTML = point.plot;
+          cell5.innerHTML = point.decisionParameter.toFixed(2);
+        });
+      }
+    </script>
+  </body>
+</html>
